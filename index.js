@@ -1,11 +1,21 @@
 // index.js
 require('dotenv').config();
 const express = require('express');
+const mongoose = require('mongoose');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Parse incoming JSON bodies
 app.use(express.json());
+
+// Connect to MongoDB
+mongoose.connect(process.env.MONGO_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+})
+.then(() => console.log('✅ MongoDB connected'))
+.catch(err => console.error('❌ MongoDB connection error:', err));
+
 
 // Basic “Hello world” endpoint
 app.get('/', (req, res) => {

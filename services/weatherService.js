@@ -5,6 +5,11 @@ const axios = require('axios');
 const WEATHER_API_KEY = process.env.WEATHER_API_KEY;
 const BASE_URL = 'http://api.weatherapi.com/v1';
 
+// Simple in-memory cache object
+const weatherCache = {}; // key: `${location}-${date}` → { data, timestamp }
+const CACHE_DURATION_MS = 6 * 60 * 60 * 1000; // 6 hours
+
+
 // Convert date to string "YYYY-MM-DD"
 function formatDate(dateStr) {
   return dateStr; // assuming already in YYYY-MM-DD format
@@ -12,13 +17,24 @@ function formatDate(dateStr) {
 
 // Fetch weather forecast for a given date and location
 async function getWeatherForDate(location, date) {
-  try {
-    // WeatherAPI's forecast endpoint supports forecast for today and next days
-    // Max 10 days forecast in free plan
-    
-    const url = `${BASE_URL}/forecast.json`;
+  const cacheKey = `${location}-${date}`;
+  const now = Date.now();
 
-    const response = await axios.get(url, {
+  // Check cache
+  if (weatherCache[cacheKey]) {
+    const { data, timestamp } = weatherCache[cacheKey];
+    if (now - timestamp < CACHE_DURATION_MS) {
+      console.log('⚡ Returning cached weather for', cacheKey);
+      return data;
+    } else {
+      console.log('⏳ Cache expired for', cacheKey);
+    }
+  }
+
+  try {
+    console.log('📡 Fetching new weather for', cacheKey);
+
+    const res = await axios.get(`${BASE_URL}/forecast.json`, {
       params: {
         key: WEATHER_API_KEY,
         q: location,
@@ -29,26 +45,33 @@ async function getWeatherForDate(location, date) {
       }
     });
 
-    // The response structure:
-    // response.data.forecast.forecastday[0] contains the data for requested day
-
-    const dayData = response.data.forecast.forecastday[0].day;
+    const dayData = res.data.forecast.forecastday[0].day;
     const condition = dayData.condition;
 
-    return {
+    const result = {
       temp: dayData.avgtemp_c,
-      wind: dayData.maxwind_kph,  // wind speed in km/h
-      weather: condition.text,     // e.g. "Partly cloudy"
+      wind: dayData.maxwind_kph,
+      weather: condition.text,
       description: condition.text,
       date: date,
     };
+
+    // ✅ Save to cache
+    weatherCache[cacheKey] = {
+      data: result,
+      timestamp: now,
+    };
+
+    return result;
+
   } catch (error) {
-  console.error('🔥 Weather API error:', error.response?.data || error.message);
-  throw new Error(error.response?.data?.error?.message || 'Error fetching weather');
+    console.error('❌ WeatherAPI Error:', error.response?.data || error.message);
+    throw new Error(error.response?.data?.error?.message || 'Error fetching weather');
+  }
 }
 
-}
 
 module.exports = {
-  getWeatherForDate
+   getWeatherForDate,
+  __getCache: () => weatherCache
 };
